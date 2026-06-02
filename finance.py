@@ -1,4 +1,4 @@
-"""Hybrid Finance OS v0.0.3 — финансовая экосистема трейдера."""
+"""Hybrid Finance OS v0.0.4 — финансовая экосистема трейдера."""
 
 import math
 
@@ -8,9 +8,9 @@ def calculate(balance: float, profit: float, withdraw: float) -> dict:
     growth = profit - withdraw
     new_balance = balance + growth
 
-    if growth > 0:
+    if growth > 0.01:
         status = "📈 Растёшь"
-    elif growth == 0:
+    elif abs(growth) < 0.01:
         status = "⏸ Стоишь"
     else:
         status = "🔻 Проедаешь"
@@ -32,7 +32,7 @@ def summary(data: dict) -> str:
     """Короткий вывод."""
     lines = [
         "═══════════════════════════════════════",
-        "       Hybrid Finance OS v0.0.3",
+        "       Hybrid Finance OS v0.0.4",
         "═══════════════════════════════════════",
         f"  Баланс:          ${data['balance']:,.2f}",
         f"  Прибыль:         ${data['profit']:,.2f}",
@@ -55,8 +55,10 @@ def summary(data: dict) -> str:
 
 def goal_calculate(balance: float, goal: float, avg_growth: float) -> dict:
     """Посчитать путь до цели."""
-    remaining = goal - balance
-    if avg_growth <= 0:
+    remaining = max(0, goal - balance)
+    if remaining == 0:
+        trades_needed = 0
+    elif avg_growth <= 0:
         trades_needed = float("inf")
     else:
         trades_needed = math.ceil(remaining / avg_growth)
@@ -93,6 +95,41 @@ def goal_summary(data: dict) -> str:
     return "\n".join(lines)
 
 
+# ─── Risk Engine ─────────────────────────────────────────────
+
+def risk_calculate(balance: float, risk_pct: float, stop_pct: float) -> dict:
+    """Рассчитать допустимую потерю и размер позиции."""
+    risk_amount = balance * (risk_pct / 100)
+    if stop_pct <= 0:
+        position_size = 0.0
+    else:
+        position_size = risk_amount / (stop_pct / 100)
+    return {
+        "balance": balance,
+        "risk_pct": risk_pct,
+        "stop_pct": stop_pct,
+        "risk_amount": risk_amount,
+        "position_size": position_size,
+    }
+
+
+def risk_summary(data: dict) -> str:
+    """Вывод Risk Engine."""
+    lines = [
+        "═══════════════════════════════════════",
+        "       ⚙ Risk Engine",
+        "═══════════════════════════════════════",
+        f"  Баланс:          ${data['balance']:,.2f}",
+        f"  Риск:            {data['risk_pct']}%",
+        f"  Стоп-лосс:       {data['stop_pct']}%",
+        "───────────────────────────────────────",
+        f"  Макс. потеря:    ${data['risk_amount']:,.2f}",
+        f"  Размер позиции:  ${data['position_size']:,.2f}",
+        "═══════════════════════════════════════",
+    ]
+    return "\n".join(lines)
+
+
 # ─── CLI ─────────────────────────────────────────────────────
 
 def input_float(prompt: str) -> float:
@@ -104,24 +141,27 @@ def input_float(prompt: str) -> float:
 
 
 def main():
-    print("\n  Hybrid Finance OS v0.0.3\n")
+    print("\n  Hybrid Finance OS v0.0.4\n")
     print("  [1] Баланс + Риск")
     print("  [2] Goal Engine")
-    print("  [3] Оба\n")
+    print("  [3] Risk Engine")
+    print("  [4] Всё\n")
     choice = input("  Выбор: ").strip()
 
-    if choice in ("1", "3"):
+    if choice not in ("1", "2", "3", "4"):
+        print("  ⚠ Неверный выбор.")
+        return
+
+    if choice in ("1", "4"):
         balance = input_float("\n  Баланс (текущий депозит): $")
         profit = input_float("  Прибыль со сделки:       $")
         withdraw = input_float("  Забираю на жизнь/кредит: $")
         data = calculate(balance, profit, withdraw)
         print()
         print(summary(data))
-    else:
-        balance = None
 
-    if choice in ("2", "3"):
-        if choice == "3":
+    if choice in ("2", "4"):
+        if choice == "4":
             bal = data["new_balance"]
             print(f"\n  (берём новый баланс: ${bal:,.2f})")
         else:
@@ -131,6 +171,18 @@ def main():
         gdata = goal_calculate(bal, goal, avg_growth)
         print()
         print(goal_summary(gdata))
+
+    if choice in ("3", "4"):
+        if choice == "4":
+            bal = data["new_balance"]
+            print(f"\n  (берём новый баланс: ${bal:,.2f})")
+        else:
+            bal = input_float("\n  Баланс: $")
+        risk_pct = input_float("  Риск (%):        ")
+        stop_pct = input_float("  Стоп-лосс (%):   ")
+        rdata = risk_calculate(bal, risk_pct, stop_pct)
+        print()
+        print(risk_summary(rdata))
 
 
 if __name__ == "__main__":
