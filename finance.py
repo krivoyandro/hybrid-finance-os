@@ -1,6 +1,11 @@
-"""Hybrid Finance OS v0.0.4 — финансовая экосистема трейдера."""
+"""Hybrid Finance OS v0.0.5 — финансовая экосистема трейдера."""
 
+import json
 import math
+import os
+from datetime import datetime
+
+HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "history.json")
 
 
 def calculate(balance: float, profit: float, withdraw: float) -> dict:
@@ -32,7 +37,7 @@ def summary(data: dict) -> str:
     """Короткий вывод."""
     lines = [
         "═══════════════════════════════════════",
-        "       Hybrid Finance OS v0.0.4",
+        "       Hybrid Finance OS v0.0.5",
         "═══════════════════════════════════════",
         f"  Баланс:          ${data['balance']:,.2f}",
         f"  Прибыль:         ${data['profit']:,.2f}",
@@ -99,11 +104,10 @@ def goal_summary(data: dict) -> str:
 
 def risk_calculate(balance: float, risk_pct: float, stop_pct: float) -> dict:
     """Рассчитать допустимую потерю и размер позиции."""
+    risk_pct = max(0, min(risk_pct, 100))
+    stop_pct = max(0.01, min(stop_pct, 100))
     risk_amount = balance * (risk_pct / 100)
-    if stop_pct <= 0:
-        position_size = 0.0
-    else:
-        position_size = risk_amount / (stop_pct / 100)
+    position_size = risk_amount / (stop_pct / 100)
     return {
         "balance": balance,
         "risk_pct": risk_pct,
@@ -130,6 +134,54 @@ def risk_summary(data: dict) -> str:
     return "\n".join(lines)
 
 
+# ─── Portfolio Memory ────────────────────────────────────────
+
+def load_session() -> dict | None:
+    """Загрузить последнюю сессию."""
+    if not os.path.exists(HISTORY_FILE):
+        return None
+    with open(HISTORY_FILE, "r") as f:
+        data = json.load(f)
+    if not data.get("sessions"):
+        return None
+    return data["sessions"][-1]
+
+
+def save_session(balance: float, goal: float, avg_growth: float, risk_pct: float):
+    """Сохранить сессию."""
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as f:
+            data = json.load(f)
+    else:
+        data = {"sessions": []}
+
+    data["sessions"].append({
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "balance": balance,
+        "goal": goal,
+        "avg_growth": avg_growth,
+        "risk_pct": risk_pct,
+    })
+
+    with open(HISTORY_FILE, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def memory_summary(session: dict) -> str:
+    """Показать сохранённую сессию."""
+    lines = [
+        "───────────────────────────────────────",
+        "  💾 Последняя сессия:",
+        f"    Дата:       {session['date']}",
+        f"    Баланс:    ${session['balance']:,.2f}",
+        f"    Цель:      ${session['goal']:,.2f}",
+        f"    Ср. рост:  ${session['avg_growth']:,.2f}",
+        f"    Риск:      {session['risk_pct']}%",
+        "───────────────────────────────────────",
+    ]
+    return "\n".join(lines)
+
+
 # ─── CLI ─────────────────────────────────────────────────────
 
 def input_float(prompt: str) -> float:
@@ -141,7 +193,13 @@ def input_float(prompt: str) -> float:
 
 
 def main():
-    print("\n  Hybrid Finance OS v0.0.4\n")
+    print("\n  Hybrid Finance OS v0.0.5\n")
+
+    # Показать последнюю сессию
+    last = load_session()
+    if last:
+        print(memory_summary(last))
+
     print("  [1] Баланс + Риск")
     print("  [2] Goal Engine")
     print("  [3] Risk Engine")
@@ -151,6 +209,12 @@ def main():
     if choice not in ("1", "2", "3", "4"):
         print("  ⚠ Неверный выбор.")
         return
+
+    # Дефолты из памяти
+    mem_balance = last["balance"] if last else None
+    mem_goal = last["goal"] if last else None
+    mem_growth = last["avg_growth"] if last else None
+    mem_risk = last["risk_pct"] if last else None
 
     if choice in ("1", "4"):
         balance = input_float("\n  Баланс (текущий депозит): $")
@@ -183,6 +247,40 @@ def main():
         rdata = risk_calculate(bal, risk_pct, stop_pct)
         print()
         print(risk_summary(rdata))
+
+    # Сохранить сессию
+    if choice == "4":
+        save_session(
+            balance=data["new_balance"],
+            goal=goal,
+            avg_growth=avg_growth,
+            risk_pct=risk_pct,
+        )
+        print("\n  💾 Сессия сохранена.")
+    elif choice == "1":
+        save_session(
+            balance=data["new_balance"],
+            goal=mem_goal or 0,
+            avg_growth=mem_growth or 0,
+            risk_pct=mem_risk or 2,
+        )
+        print("\n  💾 Сессия сохранена.")
+    elif choice == "2":
+        save_session(
+            balance=bal,
+            goal=goal,
+            avg_growth=avg_growth,
+            risk_pct=mem_risk or 2,
+        )
+        print("\n  💾 Сессия сохранена.")
+    elif choice == "3":
+        save_session(
+            balance=bal,
+            goal=mem_goal or 0,
+            avg_growth=mem_growth or 0,
+            risk_pct=risk_pct,
+        )
+        print("\n  💾 Сессия сохранена.")
 
 
 if __name__ == "__main__":
